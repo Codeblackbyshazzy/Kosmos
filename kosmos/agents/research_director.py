@@ -171,7 +171,9 @@ class ResearchDirectorAgent(BaseAgent):
             config={
                 "novelty_decline_threshold": self.config.get("novelty_decline_threshold", 0.3),
                 "novelty_decline_window": self.config.get("novelty_decline_window", 5),
-                "cost_per_discovery_threshold": self.config.get("cost_per_discovery_threshold", 1000.0)
+                "cost_per_discovery_threshold": self.config.get("cost_per_discovery_threshold", 1000.0),
+                "min_experiments_before_convergence": self.config.get("min_experiments_before_convergence", 2),
+                "max_iterations": self.max_iterations,
             }
         )
 
@@ -2746,8 +2748,19 @@ Provide a structured, actionable plan in 2-3 paragraphs.
         }:
             return False
 
-        # Check iteration limit (mandatory)
+        # Check iteration limit (mandatory) — but defer if too few experiments
+        # completed and testable work remains (mirrors ConvergenceDetector logic)
         if self.research_plan.iteration_count >= self.research_plan.max_iterations:
+            completed = len(self.research_plan.completed_experiments)
+            min_exp = self.config.get("min_experiments_before_convergence", 2)
+            untested = self.research_plan.get_untested_hypotheses()
+            has_testable_work = len(untested) > 0 or len(self.research_plan.experiment_queue) > 0
+            if completed < min_exp and has_testable_work:
+                logger.info(
+                    f"Iteration limit reached but deferring: "
+                    f"{completed}/{min_exp} experiments, testable work remains"
+                )
+                return False
             logger.info("Iteration limit reached")
             return True
 

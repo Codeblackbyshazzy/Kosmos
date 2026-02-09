@@ -564,6 +564,43 @@ class ExperimentDesignerAgent(BaseAgent):
                     measurement_method=var_data.get("measurement_method"),
                 )
 
+        # Validate: generate minimal default steps if LLM returned empty list
+        if not steps:
+            logger.warning("LLM returned empty steps, generating defaults from hypothesis")
+            steps = [
+                ProtocolStep(
+                    step_number=1, title="Load data",
+                    description=f"Load and prepare data for {hypothesis.domain} analysis",
+                    action="Load dataset",
+                ),
+                ProtocolStep(
+                    step_number=2, title="Run analysis",
+                    description=f"Execute {experiment_type.value} analysis",
+                    action=f"Run {experiment_type.value} analysis",
+                ),
+                ProtocolStep(
+                    step_number=3, title="Statistical tests",
+                    description="Run statistical tests and compute effect sizes",
+                    action="Compute statistics",
+                ),
+            ]
+
+        # Validate: generate minimal default variables if LLM returned empty dict
+        if not variables:
+            logger.warning("LLM returned empty variables, generating defaults from hypothesis")
+            variables = {
+                "independent_var": Variable(
+                    name="independent_var",
+                    type=VariableType.INDEPENDENT,
+                    description=f"Primary independent variable for {hypothesis.domain} analysis",
+                ),
+                "dependent_var": Variable(
+                    name="dependent_var",
+                    type=VariableType.DEPENDENT,
+                    description=f"Primary dependent variable for {hypothesis.domain} analysis",
+                ),
+            }
+
         # Parse control groups
         control_groups = []
         for cg_data in data.get("control_groups", []):

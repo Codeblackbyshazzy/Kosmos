@@ -202,6 +202,9 @@ class ConvergenceDetector:
             min(5, max(2, max_iters - 1))
         )
         self.cost_per_discovery_threshold = self.config.get("cost_per_discovery_threshold", 1000.0)
+        self.min_experiments_before_convergence = self.config.get(
+            "min_experiments_before_convergence", 2
+        )
 
         # Metrics tracking
         self.metrics = ConvergenceMetrics()
@@ -312,16 +315,48 @@ class ConvergenceDetector:
         """
         Check if iteration limit reached.
 
+        Defers convergence when fewer than min_experiments_before_convergence
+        experiments have completed AND testable work remains (untested hypotheses
+        or queued experiments). This prevents premature stopping when the pipeline
+        generated hypotheses but only tested a small fraction.
+
+        Hard caps (MAX_ACTIONS_PER_ITERATION, max_runtime_hours) still apply
+        independently, so this cannot cause infinite loops.
+
         Args:
             research_plan: Research plan
 
         Returns:
             StoppingDecision
         """
-        should_stop = research_plan.iteration_count >= research_plan.max_iterations
+        at_limit = research_plan.iteration_count >= research_plan.max_iterations
+
+        if at_limit:
+            completed = len(research_plan.completed_experiments)
+            untested = research_plan.get_untested_hypotheses()
+            has_testable_work = len(untested) > 0 or len(research_plan.experiment_queue) > 0
+
+            if completed < self.min_experiments_before_convergence and has_testable_work:
+                logger.info(
+                    f"Iteration limit reached but deferring convergence: "
+                    f"{completed}/{self.min_experiments_before_convergence} experiments completed, "
+                    f"testable work remains ({len(untested)} untested, "
+                    f"{len(research_plan.experiment_queue)} queued)"
+                )
+                return StoppingDecision(
+                    should_stop=False,
+                    reason=StoppingReason.ITERATION_LIMIT,
+                    is_mandatory=True,
+                    confidence=0.5,
+                    details=(
+                        f"Iteration {research_plan.iteration_count}/{research_plan.max_iterations} "
+                        f"but only {completed}/{self.min_experiments_before_convergence} experiments "
+                        f"completed — deferring"
+                    )
+                )
 
         return StoppingDecision(
-            should_stop=should_stop,
+            should_stop=at_limit,
             reason=StoppingReason.ITERATION_LIMIT,
             is_mandatory=True,
             confidence=1.0,

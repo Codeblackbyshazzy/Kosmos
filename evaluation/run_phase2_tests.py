@@ -17,6 +17,13 @@ os.chdir("/mnt/c/python/Kosmos")
 from dotenv import load_dotenv
 load_dotenv(override=True)
 
+# Initialize DB so NoveltyChecker doesn't fail in subprocess (Issue #4)
+from kosmos.db import init_from_config
+try:
+    init_from_config()
+except RuntimeError:
+    pass  # Already initialized
+
 results = {}
 
 # Biology defaults for backward compatibility
@@ -268,10 +275,13 @@ def test_code_execution(domain=None, data_path=None):
         "hardcoded_effect_size": "0.5" in code,
     }
 
-    # Execute the code
+    # Execute the code — use execute_with_data when data_path is provided
     executor = CodeExecutor()
     try:
-        exec_result = executor.execute(code)
+        if data_path:
+            exec_result = executor.execute_with_data(code, data_path)
+        else:
+            exec_result = executor.execute(code)
         result["execution"] = {
             "success": exec_result.success,
             "stdout": str(getattr(exec_result, 'stdout', ''))[:500],

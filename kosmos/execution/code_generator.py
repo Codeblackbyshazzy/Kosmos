@@ -557,8 +557,11 @@ class GenericComputationalCodeTemplate(CodeTemplate):
         super().__init__("generic_computational", ExperimentType.COMPUTATIONAL)
 
     def matches(self, protocol: ExperimentProtocol) -> bool:
-        """Match COMPUTATIONAL experiments or act as catch-all."""
-        return protocol.experiment_type == ExperimentType.COMPUTATIONAL
+        """Match COMPUTATIONAL or DATA_ANALYSIS experiments (catch-all fallback)."""
+        return protocol.experiment_type in (
+            ExperimentType.COMPUTATIONAL,
+            ExperimentType.DATA_ANALYSIS,
+        )
 
     def generate(self, protocol: ExperimentProtocol) -> str:
         """Generate generic computational analysis code."""
@@ -786,7 +789,7 @@ class ExperimentCodeGenerator:
             CorrelationAnalysisCodeTemplate(),
             LogLogScalingCodeTemplate(),
             MLExperimentCodeTemplate(),
-            GenericComputationalCodeTemplate(),  # Catch-all for COMPUTATIONAL
+            GenericComputationalCodeTemplate(),  # Catch-all for COMPUTATIONAL + DATA_ANALYSIS
         ]
 
         logger.info(f"Registered {len(self.templates)} code templates")
