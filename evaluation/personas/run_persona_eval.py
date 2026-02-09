@@ -199,19 +199,26 @@ def run_tier1(persona_name: str, persona: dict, run_dir: Path, dry_run: bool = F
     if result.returncode != 0:
         print(f"  WARNING: Evaluation exited with code {result.returncode}")
 
-    # Copy artifacts from default location if they exist and output-dir wasn't used
-    # (backward compatibility: some artifacts may be written to evaluation/artifacts/)
-    default_artifacts = EVAL_DIR / "artifacts"
-    tier1_artifacts = run_dir / "tier1" / "artifacts"
-    if default_artifacts.exists():
-        for item in default_artifacts.iterdir():
-            dest = tier1_artifacts / item.name
-            if item.is_dir():
-                if dest.exists():
-                    shutil.rmtree(dest)
-                shutil.copytree(item, dest)
-            else:
-                shutil.copy2(item, dest)
+    # Run Phase 2 component tests with persona-specific parameters
+    research = persona.get("research", {})
+    component_output = str(run_dir / "tier1" / "artifacts" / "phase2_components")
+    component_cmd = [
+        sys.executable, str(EVAL_DIR / "run_phase2_tests.py"),
+        "--output-dir", component_output,
+    ]
+    if research.get("question"):
+        component_cmd.extend(["--research-question", research["question"]])
+    if research.get("domain"):
+        component_cmd.extend(["--domain", research["domain"]])
+    if research.get("dataset"):
+        dp = EVAL_DIR / research["dataset"]
+        if dp.exists():
+            component_cmd.extend(["--data-path", str(dp)])
+
+    print(f"  Running Phase 2 component tests: {' '.join(component_cmd)}")
+    component_result = subprocess.run(component_cmd, cwd=str(PROJECT_ROOT))
+    if component_result.returncode != 0:
+        print(f"  WARNING: Component tests exited with code {component_result.returncode}")
 
     # Copy the latest log file
     log_dir = EVAL_DIR / "logs"

@@ -9,7 +9,7 @@ Phases:
   1. Pre-flight checks (config, LLM connectivity, DB, type compatibility)
   2. Single-iteration E2E smoke test
   3. Multi-iteration full loop (3 iterations)
-  4. Dataset input test (default: enzyme_kinetics_test.csv)
+  4. Dataset input test (requires --data-path)
   5. Output quality assessment
   6. Scientific rigor scorecard
   7. Paper compliance gap analysis
@@ -255,7 +255,7 @@ def run_phase1_preflight() -> PhaseResult:
 # Phase 2: Single-Iteration E2E Smoke Test
 # ============================================================================
 
-async def run_phase2_smoke_test(research_question: str = None, domain: str = None) -> PhaseResult:
+async def run_phase2_smoke_test(research_question: str = None, domain: str = None, data_path: Path = None) -> PhaseResult:
     """Run one research iteration and capture results."""
     result = PhaseResult(phase=2, name="Single-Iteration E2E Smoke Test", status="PASS")
     start = time.time()
@@ -285,6 +285,8 @@ async def run_phase2_smoke_test(research_question: str = None, domain: str = Non
             "llm_provider": config.llm_provider,
             "enable_cache": True,
         }
+        if data_path:
+            flat_config["data_path"] = str(Path(data_path).resolve())
 
         logger.info("Phase 2: Creating ResearchDirector...")
         director = ResearchDirectorAgent(
@@ -415,7 +417,7 @@ async def run_phase2_smoke_test(research_question: str = None, domain: str = Non
 # Phase 3: Multi-Iteration Full Loop (3 iterations)
 # ============================================================================
 
-async def run_phase3_multi_iteration(research_question: str = None, domain: str = None, max_iterations: int = None) -> PhaseResult:
+async def run_phase3_multi_iteration(research_question: str = None, domain: str = None, max_iterations: int = None, data_path: Path = None) -> PhaseResult:
     """Run full iterations testing complete cycle."""
     result = PhaseResult(phase=3, name="Multi-Iteration Full Loop (3 iter)", status="PASS")
     start = time.time()
@@ -444,6 +446,8 @@ async def run_phase3_multi_iteration(research_question: str = None, domain: str 
             "llm_provider": config.llm_provider,
             "enable_cache": True,
         }
+        if data_path:
+            flat_config["data_path"] = str(Path(data_path).resolve())
 
         logger.info(f"Phase 3: Creating ResearchDirector for {max_iterations or 3} iterations...")
         director = ResearchDirectorAgent(
@@ -567,13 +571,17 @@ async def run_phase3_multi_iteration(research_question: str = None, domain: str 
 # ============================================================================
 
 async def run_phase4_dataset_test(research_question: str = None, domain: str = None, data_path: Path = None) -> PhaseResult:
-    """Test with a dataset (default: enzyme_kinetics_test.csv)."""
+    """Test with a provided dataset (data_path required)."""
     result = PhaseResult(phase=4, name="Dataset Input Test", status="PASS")
     start = time.time()
     _reset_eval_state()
 
     if data_path is None:
-        data_path = Path(__file__).parent / "data" / "enzyme_kinetics_test.csv"
+        result.add_check("dataset_exists", False, "No data_path provided and no default dataset")
+        result.status = "FAIL"
+        result.error = "data_path required for Phase 4 — no hardcoded default"
+        result.duration_seconds = time.time() - start
+        return result
     elif not isinstance(data_path, Path):
         data_path = Path(data_path)
 
@@ -1340,7 +1348,7 @@ async def main(output_dir: Path = None, research_question: str = None,
                     instead of the default location.
         research_question: Override research question for all phases.
         domain: Override domain for all phases.
-        data_path: Override dataset path for Phase 4.
+        data_path: Dataset path for Phase 4 (required for Phase 4 to run).
         max_iterations: Override max iterations for Phase 3.
     """
     print("=" * 70)
@@ -1373,14 +1381,14 @@ async def main(output_dir: Path = None, research_question: str = None,
 
     # Phase 2: Single-iteration smoke test
     print("[Phase 2] Single-Iteration E2E Smoke Test...")
-    p2 = await run_phase2_smoke_test(research_question=research_question, domain=domain)
+    p2 = await run_phase2_smoke_test(research_question=research_question, domain=domain, data_path=data_path)
     report.add_phase(p2)
     print(f"  -> {p2.status} ({p2.checks_passed}/{p2.checks_total} checks, {p2.duration_seconds:.1f}s)")
     print()
 
     # Phase 3: Multi-iteration
     print("[Phase 3] Multi-Iteration Full Loop...")
-    p3 = await run_phase3_multi_iteration(research_question=research_question, domain=domain, max_iterations=max_iterations)
+    p3 = await run_phase3_multi_iteration(research_question=research_question, domain=domain, max_iterations=max_iterations, data_path=data_path)
     report.add_phase(p3)
     print(f"  -> {p3.status} ({p3.checks_passed}/{p3.checks_total} checks, {p3.duration_seconds:.1f}s)")
     print()

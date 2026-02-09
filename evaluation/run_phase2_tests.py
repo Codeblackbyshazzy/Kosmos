@@ -1,6 +1,10 @@
 """Phase 2: Component Testing Script
 Tests each KOSMOS agent/component independently and captures results.
+
+Accepts --research-question, --domain, and --data-path to test with
+persona-specific parameters instead of hardcoded biology defaults.
 """
+import argparse
 import json
 import time
 import traceback
@@ -14,6 +18,11 @@ from dotenv import load_dotenv
 load_dotenv(override=True)
 
 results = {}
+
+# Biology defaults for backward compatibility
+DEFAULT_RESEARCH_QUESTION = "How does temperature affect enzyme activity?"
+DEFAULT_DOMAIN = "biology"
+
 
 def test_component(name, func):
     """Run a component test and capture results."""
@@ -43,8 +52,11 @@ def test_component(name, func):
 # ============================================================
 # Test 2.1: Hypothesis Generation
 # ============================================================
-def test_hypothesis_generation():
+def test_hypothesis_generation(research_question=None, domain=None):
     from kosmos.agents.hypothesis_generator import HypothesisGeneratorAgent
+
+    rq = research_question or DEFAULT_RESEARCH_QUESTION
+    dom = domain or DEFAULT_DOMAIN
 
     agent = HypothesisGeneratorAgent(config={
         "use_literature_context": False,
@@ -52,8 +64,8 @@ def test_hypothesis_generation():
     })
 
     response = agent.generate_hypotheses(
-        research_question="How does temperature affect enzyme activity?",
-        domain="biology",
+        research_question=rq,
+        domain=dom,
         num_hypotheses=3,
         store_in_db=False
     )
@@ -66,6 +78,8 @@ def test_hypothesis_generation():
     result = {
         "count": len(hypotheses),
         "response_type": type(response).__name__,
+        "research_question": rq,
+        "domain": dom,
         "hypotheses": []
     }
 
@@ -93,14 +107,20 @@ def test_hypothesis_generation():
 # ============================================================
 # Test 2.2: Literature Search
 # ============================================================
-def test_literature_search():
+def test_literature_search(research_question=None, domain=None):
     from kosmos.literature.unified_search import UnifiedLiteratureSearch
 
+    rq = research_question or DEFAULT_RESEARCH_QUESTION
+
     searcher = UnifiedLiteratureSearch()
-    papers = searcher.search("enzyme kinetics temperature", max_results=5)
+    # Derive search query from the research question (truncate to 80 chars)
+    query = rq[:80] if rq else "enzyme kinetics temperature"
+    papers = searcher.search(query, max_results=5)
 
     result = {
         "count": len(papers),
+        "search_query": query,
+        "research_question": rq,
         "papers": []
     }
 
@@ -120,10 +140,13 @@ def test_literature_search():
 # ============================================================
 # Test 2.3: Experiment Design
 # ============================================================
-def test_experiment_design():
+def test_experiment_design(research_question=None, domain=None):
     from kosmos.agents.experiment_designer import ExperimentDesignerAgent
     from kosmos.models.hypothesis import Hypothesis
     from kosmos.models.experiment import ExperimentType
+
+    rq = research_question or DEFAULT_RESEARCH_QUESTION
+    dom = domain or DEFAULT_DOMAIN
 
     agent = ExperimentDesignerAgent(config={
         "use_templates": True,
@@ -131,10 +154,10 @@ def test_experiment_design():
     })
 
     hypothesis = Hypothesis(
-        research_question="How does temperature affect enzyme activity?",
-        statement="Higher temperature increases enzyme activity up to an optimal point of 37C, after which activity decreases due to denaturation",
-        rationale="Enzyme kinetics theory predicts a bell-shaped curve for temperature-activity relationship",
-        domain="biology",
+        research_question=rq,
+        statement=f"Testing hypothesis for: {rq[:100]}",
+        rationale=f"Domain-appropriate rationale for {dom} research",
+        domain=dom,
         novelty_score=0.7,
         testability_score=0.8,
         confidence_score=0.6
@@ -151,6 +174,8 @@ def test_experiment_design():
 
     result = {
         "count": len(protocols),
+        "research_question": rq,
+        "domain": dom,
         "protocols": []
     }
 
@@ -182,7 +207,7 @@ def test_experiment_design():
 # ============================================================
 # Test 2.4: Code Generation & Execution
 # ============================================================
-def test_code_execution():
+def test_code_execution(domain=None, data_path=None):
     from kosmos.execution.code_generator import TTestComparisonCodeTemplate
     from kosmos.execution.executor import CodeExecutor
     from kosmos.models.experiment import (
@@ -191,34 +216,36 @@ def test_code_execution():
         StatisticalTest, ResourceRequirements
     )
 
+    dom = domain or DEFAULT_DOMAIN
+
     # Build a proper ExperimentProtocol object with all required fields
     protocol = ExperimentProtocol(
-        name="Temperature Effect T-Test",
+        name="Domain Data Analysis T-Test",
         hypothesis_id="test-hyp-001",
         experiment_type=ExperimentType.DATA_ANALYSIS,
-        domain="biology",
-        description="Compare enzyme activity at different temperatures using independent samples t-test",
-        objective="Determine if temperature significantly affects enzyme activity",
+        domain=dom,
+        description=f"Compare groups using independent samples t-test in {dom} domain",
+        objective=f"Determine if there is a significant difference in {dom} data",
         steps=[
-            ProtocolStep(step_number=1, title="Generate data", description="Generate synthetic temperature and enzyme activity data", action="Generate synthetic data"),
+            ProtocolStep(step_number=1, title="Generate data", description="Generate synthetic data for analysis", action="Generate synthetic data"),
             ProtocolStep(step_number=2, title="Run t-test", description="Perform independent samples t-test comparing groups", action="Perform independent samples t-test"),
             ProtocolStep(step_number=3, title="Effect size", description="Calculate Cohen's d effect size for the comparison", action="Calculate Cohen's d effect size"),
         ],
         variables={
-            "temperature": Variable(name="temperature", type=VariableType.INDEPENDENT, description="Temperature in Celsius"),
-            "enzyme_activity": Variable(name="enzyme_activity", type=VariableType.DEPENDENT, description="Enzyme activity rate"),
+            "group": Variable(name="group", type=VariableType.INDEPENDENT, description="Group variable"),
+            "measurement": Variable(name="measurement", type=VariableType.DEPENDENT, description="Measurement variable"),
         },
         statistical_tests=[
             StatisticalTestSpec(
                 test_type=StatisticalTest.T_TEST,
-                description="Independent t-test comparing temperature groups",
-                null_hypothesis="No difference in enzyme activity between temperature groups",
-                variables=["temperature", "enzyme_activity"]
+                description="Independent t-test comparing groups",
+                null_hypothesis="No difference between groups",
+                variables=["group", "measurement"]
             )
         ],
         sample_size=100,
         control_groups=[
-            ControlGroup(name="control", description="Room temperature 25C baseline", variables={"temperature": 25}, rationale="Standard room temperature as baseline comparison")
+            ControlGroup(name="control", description="Control group baseline", variables={"group": "control"}, rationale="Baseline comparison group")
         ],
         resource_requirements=ResourceRequirements(
             estimated_duration_minutes=5,
@@ -234,6 +261,8 @@ def test_code_execution():
         "code_generated": bool(code),
         "code_length": len(code),
         "code_preview": code[:500] if code else "No code generated",
+        "domain": dom,
+        "data_path": str(data_path) if data_path else None,
         "has_data_source_flag": "_data_source" in code,
         "uses_synthetic_data": "synthetic" in code.lower() or "np.random" in code,
         "hardcoded_effect_size": "0.5" in code,
@@ -273,9 +302,12 @@ def test_code_execution():
 # ============================================================
 # Test 2.5: Data Analysis
 # ============================================================
-def test_data_analysis():
+def test_data_analysis(research_question=None, domain=None):
     from kosmos.agents.data_analyst import DataAnalystAgent
     from kosmos.models.result import ExperimentResult, ResultStatus, ExecutionMetadata, StatisticalTestResult
+
+    rq = research_question or DEFAULT_RESEARCH_QUESTION
+    dom = domain or DEFAULT_DOMAIN
 
     agent = DataAnalystAgent()
 
@@ -313,16 +345,16 @@ def test_data_analysis():
             experiment_id="test-exp-001",
             protocol_id="test-proto-001",
         ),
-        summary="T-test comparing enzyme activity at 25C vs 37C: significant difference (p=0.003, d=0.8)",
+        summary=f"T-test for {dom} domain research: significant difference (p=0.003, d=0.8)",
         raw_data={"control_mean": 45.0, "treatment_mean": 98.0}
     )
 
     from kosmos.models.hypothesis import Hypothesis
     hypothesis = Hypothesis(
-        research_question="How does temperature affect enzyme activity?",
-        statement="Higher temperature increases enzyme activity",
-        rationale="Enzyme kinetics theory predicts activity increases with temperature",
-        domain="biology"
+        research_question=rq,
+        statement=f"Testing hypothesis for: {rq[:100]}",
+        rationale=f"Domain-appropriate rationale for {dom} research",
+        domain=dom
     )
 
     interpretation = agent.interpret_results(
@@ -334,6 +366,8 @@ def test_data_analysis():
     result = {
         "interpretation_received": bool(interpretation),
         "interpretation_type": type(interpretation).__name__,
+        "research_question": rq,
+        "domain": dom,
     }
 
     # Extract key fields from interpretation
@@ -365,16 +399,19 @@ def test_data_analysis():
 # ============================================================
 # Test 2.6: Convergence Detection
 # ============================================================
-def test_convergence_detection():
+def test_convergence_detection(research_question=None, domain=None):
     from kosmos.core.convergence import ConvergenceDetector
     from kosmos.models.hypothesis import Hypothesis
     from kosmos.core.workflow import ResearchPlan
 
+    rq = research_question or DEFAULT_RESEARCH_QUESTION
+    dom = domain or DEFAULT_DOMAIN
+
     detector = ConvergenceDetector(config={"max_iterations": 5})
 
     plan = ResearchPlan(
-        research_question="How does temperature affect enzyme activity?",
-        domain="biology",
+        research_question=rq,
+        domain=dom,
         max_iterations=5,
         iteration_count=5  # At the limit
     )
@@ -386,6 +423,8 @@ def test_convergence_detection():
     )
 
     result = {
+        "research_question": rq,
+        "domain": dom,
         "test_max_iterations": {
             "should_stop": decision1.should_stop,
             "reason": str(decision1.reason),
@@ -397,8 +436,8 @@ def test_convergence_detection():
     # Test 2: Declining novelty
     detector2 = ConvergenceDetector(config={"max_iterations": 20})
     plan2 = ResearchPlan(
-        research_question="Test",
-        domain="biology",
+        research_question=rq,
+        domain=dom,
         max_iterations=20,
         iteration_count=6
     )
@@ -406,10 +445,10 @@ def test_convergence_detection():
     hypotheses = []
     for i, score in enumerate([0.8, 0.6, 0.4, 0.2, 0.1]):
         h = Hypothesis(
-            research_question="How does temperature affect enzyme activity?",
-            statement=f"Hypothesis {i} about enzyme activity and temperature effects on catalysis",
-            rationale="Test rationale for testing convergence detection system",
-            domain="biology",
+            research_question=rq,
+            statement=f"Hypothesis {i} for {dom} domain research convergence test",
+            rationale=f"Test rationale for {dom} convergence detection",
+            domain=dom,
             novelty_score=score,
             testability_score=0.5
         )
@@ -446,16 +485,47 @@ def test_convergence_detection():
 # Run all tests
 # ============================================================
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description="Phase 2 component tests for Kosmos evaluation",
+    )
+    parser.add_argument(
+        "--research-question", type=str, default=None,
+        help="Research question (default: enzyme kinetics question)",
+    )
+    parser.add_argument(
+        "--domain", type=str, default=None,
+        help="Research domain (default: biology)",
+    )
+    parser.add_argument(
+        "--data-path", type=str, default=None,
+        help="Path to dataset file for code execution test",
+    )
+    parser.add_argument(
+        "--output-dir", type=str, default=None,
+        help="Output directory for results (default: evaluation/artifacts/phase2_components)",
+    )
+    args = parser.parse_args()
+
+    rq = args.research_question
+    dom = args.domain
+    dp = args.data_path
+
     print(f"Phase 2 Component Tests - {datetime.now().isoformat()}")
+    if rq:
+        print(f"  Research question: {rq[:80]}")
+    if dom:
+        print(f"  Domain: {dom}")
+    if dp:
+        print(f"  Data path: {dp}")
     print(f"{'='*60}")
 
     tests = [
-        ("2.1_hypothesis_generation", test_hypothesis_generation),
-        ("2.2_literature_search", test_literature_search),
-        ("2.3_experiment_design", test_experiment_design),
-        ("2.4_code_execution", test_code_execution),
-        ("2.5_data_analysis", test_data_analysis),
-        ("2.6_convergence_detection", test_convergence_detection),
+        ("2.1_hypothesis_generation", lambda: test_hypothesis_generation(rq, dom)),
+        ("2.2_literature_search", lambda: test_literature_search(rq, dom)),
+        ("2.3_experiment_design", lambda: test_experiment_design(rq, dom)),
+        ("2.4_code_execution", lambda: test_code_execution(dom, dp)),
+        ("2.5_data_analysis", lambda: test_data_analysis(rq, dom)),
+        ("2.6_convergence_detection", lambda: test_convergence_detection(rq, dom)),
     ]
 
     for name, func in tests:
@@ -477,7 +547,7 @@ if __name__ == "__main__":
         if status == "FAIL":
             print(f"    Error: {r.get('error', 'unknown')[:200]}")
 
-    output_path = "/mnt/c/python/Kosmos/evaluation/artifacts/phase2_components"
+    output_path = args.output_dir or "/mnt/c/python/Kosmos/evaluation/artifacts/phase2_components"
     os.makedirs(output_path, exist_ok=True)
 
     for name, r in results.items():
