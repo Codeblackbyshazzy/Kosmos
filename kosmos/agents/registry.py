@@ -3,6 +3,9 @@ Agent registry for discovering and managing agents.
 
 Provides centralized management of all active agents in the system.
 
+Reserved for multi-agent message-passing architecture (future work).
+Not yet integrated into the main research loop.
+
 Async Architecture (Issue #66 fix):
 - _route_message() and send_message() are now async
 - Sync wrappers provided for backwards compatibility

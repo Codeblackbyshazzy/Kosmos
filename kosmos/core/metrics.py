@@ -17,6 +17,7 @@ import threading
 import logging
 from enum import Enum
 
+from kosmos.core.pricing import get_model_cost
 
 logger = logging.getLogger(__name__)
 
@@ -226,10 +227,12 @@ class MetricsCollector:
             error_rate = (self.api_errors / self.api_calls
                         if self.api_calls > 0 else 0)
 
-            # Estimate cost (Claude 3.5 Sonnet pricing)
-            input_cost = (self.total_input_tokens / 1_000_000) * 3.0
-            output_cost = (self.total_output_tokens / 1_000_000) * 15.0
-            total_cost = input_cost + output_cost
+            # Estimate cost using canonical pricing (default Sonnet)
+            total_cost = get_model_cost(
+                "claude-sonnet-4-5",
+                self.total_input_tokens,
+                self.total_output_tokens
+            )
 
             return {
                 "total_calls": self.api_calls,
@@ -494,10 +497,12 @@ class MetricsCollector:
                         hits = claude_cache_stats.get('hits', 0)
 
                         if hits > 0:
-                            # Claude 3.5 Sonnet pricing: $3/M input, $15/M output
-                            input_saved = (avg_input_tokens * hits / 1_000_000) * 3.0
-                            output_saved = (avg_output_tokens * hits / 1_000_000) * 15.0
-                            total_saved = input_saved + output_saved
+                            # Estimate savings using canonical pricing
+                            total_saved = get_model_cost(
+                                "claude-sonnet-4-5",
+                                avg_input_tokens * hits,
+                                avg_output_tokens * hits
+                            )
 
                             base_stats['estimated_cost_saved_usd'] = round(total_saved, 2)
                             base_stats['cache_efficiency'] = 'high' if cache_hit_rate > 30 else 'moderate' if cache_hit_rate > 10 else 'low'
@@ -753,11 +758,8 @@ class MetricsCollector:
         total_input = sum(call.get("input_tokens", 0) for call in period_calls)
         total_output = sum(call.get("output_tokens", 0) for call in period_calls)
 
-        # Calculate cost (Claude 3.5 Sonnet pricing)
-        input_cost = (total_input / 1_000_000) * 3.0
-        output_cost = (total_output / 1_000_000) * 15.0
-
-        return input_cost + output_cost
+        # Calculate cost using canonical pricing (default Sonnet)
+        return get_model_cost("claude-sonnet-4-5", total_input, total_output)
 
     def _calculate_period_requests(self) -> int:
         """Calculate API requests for current budget period."""

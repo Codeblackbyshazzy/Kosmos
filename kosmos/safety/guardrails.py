@@ -46,7 +46,8 @@ class SafetyGuardrails:
     def __init__(
         self,
         incident_log_path: Optional[str] = None,
-        enable_signal_handlers: bool = True
+        enable_signal_handlers: bool = True,
+        docker_client: Optional[Any] = None
     ):
         """
         Initialize safety guardrails.
@@ -54,7 +55,10 @@ class SafetyGuardrails:
         Args:
             incident_log_path: Path to safety incident log file
             enable_signal_handlers: Register signal handlers for emergency stop
+            docker_client: Optional Docker client for killing sandbox containers
+                          on emergency stop (e.g., docker.from_env())
         """
+        self.docker_client = docker_client
         config = get_config()
 
         # Initialize code validator
@@ -245,6 +249,30 @@ class SafetyGuardrails:
                 )
             except Exception as e:
                 logger.error(f"Could not create stop flag file: {e}")
+
+        # Kill sandbox Docker containers if docker_client is available
+        if self.docker_client:
+            try:
+                containers = self.docker_client.containers.list(
+                    filters={'label': 'kosmos.sandbox=true'}
+                )
+                for container in containers:
+                    try:
+                        container.kill()
+                        logger.info(
+                            f"Killed sandbox container {container.short_id} "
+                            f"during emergency stop"
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            f"Failed to kill container {container.short_id}: {e}"
+                        )
+                if containers:
+                    logger.info(
+                        f"Emergency stop killed {len(containers)} sandbox container(s)"
+                    )
+            except Exception as e:
+                logger.error(f"Error listing sandbox containers during emergency stop: {e}")
 
         # Log as critical incident
         incident = SafetyIncident(

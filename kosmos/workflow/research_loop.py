@@ -113,7 +113,24 @@ class ResearchWorkflow:
         # Gap 2: Orchestration Components
         self.plan_creator = PlanCreatorAgent(anthropic_client)
         self.plan_reviewer = PlanReviewerAgent(anthropic_client)
-        self.delegation_manager = DelegationManager()
+
+        # Wire real agents into DelegationManager when a client is available
+        agents = {}
+        if anthropic_client:
+            from kosmos.agents import (
+                DataAnalystAgent,
+                HypothesisGeneratorAgent,
+                ExperimentDesignerAgent,
+                LiteratureAnalyzerAgent,
+            )
+            agents = {
+                'data_analyst': DataAnalystAgent(),
+                'hypothesis_generator': HypothesisGeneratorAgent(),
+                'experiment_designer': ExperimentDesignerAgent(),
+                'literature_analyzer': LiteratureAnalyzerAgent(),
+            }
+
+        self.delegation_manager = DelegationManager(agents=agents)
         self.novelty_detector = NoveltyDetector()
         logger.info("✓ Gap 2: Orchestration components initialized")
 

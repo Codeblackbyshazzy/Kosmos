@@ -196,12 +196,17 @@ class CodeValidator:
         warnings.extend(network_warnings)
         checks_performed.append("network_operations")
 
-        # 5. Ethical guidelines check
+        # 5. AST call analysis (getattr/setattr/delattr calls, dunder access)
+        ast_call_violations = self._check_ast_calls(code)
+        violations.extend(ast_call_violations)
+        checks_performed.append("ast_call_analysis")
+
+        # 6. Ethical guidelines check
         ethical_violations = self._check_ethical_guidelines(code, context)
         violations.extend(ethical_violations)
         checks_performed.append("ethical_guidelines")
 
-        # 6. Assess risk level
+        # 7. Assess risk level
         risk_level = self._assess_risk_level(violations)
 
         # Create report
@@ -313,6 +318,61 @@ class CodeValidator:
                     ))
 
         return violations, warnings
+
+    def _check_ast_calls(self, code: str) -> List[SafetyViolation]:
+        """Check for dangerous function calls and dunder attribute access via AST.
+
+        Detects:
+        - Calls to getattr(), setattr(), delattr() that bypass static analysis
+        - Access to dangerous dunder attributes: __dict__, __class__,
+          __builtins__, __subclasses__
+        """
+        violations = []
+        try:
+            tree = ast.parse(code)
+        except SyntaxError:
+            # Syntax errors are caught by _check_syntax; skip AST analysis
+            return violations
+
+        # Dangerous built-in reflection calls
+        DANGEROUS_CALLS = {'getattr', 'setattr', 'delattr'}
+
+        # Dangerous dunder attributes
+        DANGEROUS_DUNDERS = {'__dict__', '__class__', '__builtins__', '__subclasses__'}
+
+        for node in ast.walk(tree):
+            # Check for getattr/setattr/delattr calls
+            if isinstance(node, ast.Call):
+                func = node.func
+                func_name = None
+                if isinstance(func, ast.Name):
+                    func_name = func.id
+                elif isinstance(func, ast.Attribute):
+                    func_name = func.attr
+
+                if func_name in DANGEROUS_CALLS:
+                    lineno = getattr(node, 'lineno', None)
+                    violations.append(SafetyViolation(
+                        type=ViolationType.DANGEROUS_CODE,
+                        severity=RiskLevel.CRITICAL,
+                        message=f"Dangerous reflection call detected: {func_name}()",
+                        location=f"line {lineno}" if lineno else None,
+                        details={"call": func_name}
+                    ))
+
+            # Check for dunder attribute access (e.g., obj.__dict__)
+            if isinstance(node, ast.Attribute):
+                if node.attr in DANGEROUS_DUNDERS:
+                    lineno = getattr(node, 'lineno', None)
+                    violations.append(SafetyViolation(
+                        type=ViolationType.DANGEROUS_CODE,
+                        severity=RiskLevel.CRITICAL,
+                        message=f"Dangerous dunder access detected: .{node.attr}",
+                        location=f"line {lineno}" if lineno else None,
+                        details={"attribute": node.attr}
+                    ))
+
+        return violations
 
     def _check_network_operations(self, code: str) -> List[str]:
         """Check for network operations (warnings only)."""

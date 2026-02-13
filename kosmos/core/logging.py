@@ -9,6 +9,7 @@ Provides:
 - Debug mode
 """
 
+import contextvars
 import logging
 import logging.handlers
 import json
@@ -17,6 +18,11 @@ from typing import Optional, Dict, Any
 from datetime import datetime
 from pathlib import Path
 from enum import Enum
+
+# Module-level correlation ID for request tracing across async boundaries
+correlation_id: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
+    'correlation_id', default=None
+)
 
 
 class LogFormat(str, Enum):
@@ -51,6 +57,11 @@ class JSONFormatter(logging.Formatter):
             "function": record.funcName,
             "line": record.lineno,
         }
+
+        # Add correlation ID if set
+        cid = correlation_id.get()
+        if cid is not None:
+            log_data["correlation_id"] = cid
 
         # Add exception info if present
         if record.exc_info:
