@@ -376,10 +376,17 @@ class AgentRegistry:
             )
             for target in targets
         ]
-        messages = await asyncio.gather(*send_tasks)
+        results = await asyncio.gather(*send_tasks, return_exceptions=True)
 
-        logger.info(f"Broadcast message from {from_agent_id} to {len(targets)} agents")
-        return list(messages)
+        messages = []
+        for i, result in enumerate(results):
+            if isinstance(result, BaseException):
+                logger.error(f"Failed to send broadcast to {targets[i].agent_id}: {result}")
+            else:
+                messages.append(result)
+
+        logger.info(f"Broadcast message from {from_agent_id} to {len(messages)}/{len(targets)} agents")
+        return messages
 
     def broadcast_message_sync(
         self,

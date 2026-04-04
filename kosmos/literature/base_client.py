@@ -248,8 +248,8 @@ class BaseLiteratureClient(ABC):
             return False
 
         if len(query) > 1000:
-            self.logger.warning(f"Query too long ({len(query)} chars), truncating to 1000")
-            return True
+            self.logger.warning(f"Query too long ({len(query)} chars), max 1000")
+            return False
 
         return True
 

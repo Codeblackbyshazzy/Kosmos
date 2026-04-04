@@ -208,7 +208,7 @@ class BaseAgent:
 
     def is_running(self) -> bool:
         """Check if agent is running."""
-        return self.status == AgentStatus.RUNNING
+        return self.status in (AgentStatus.RUNNING, AgentStatus.WORKING, AgentStatus.IDLE)
 
     def is_healthy(self) -> bool:
         """

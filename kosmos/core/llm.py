@@ -663,8 +663,12 @@ def get_client(reset: bool = False, use_provider_system: bool = True) -> Union[C
                     logger.warning(f"Failed to initialize provider from config: {e}. Falling back to AnthropicProvider")
                     # Fallback to AnthropicProvider instance (LLMProvider-compatible)
                     from kosmos.core.providers.anthropic import AnthropicProvider
+                    api_key = os.environ.get('ANTHROPIC_API_KEY')
+                    if not api_key:
+                        logger.error("ANTHROPIC_API_KEY not set; cannot create fallback provider")
+                        raise RuntimeError("No API key available for fallback AnthropicProvider")
                     fallback_config = {
-                        'api_key': os.environ.get('ANTHROPIC_API_KEY'),
+                        'api_key': api_key,
                         'model': _DEFAULT_CLAUDE_SONNET_MODEL,
                         'max_tokens': 4096,
                         'temperature': 0.7,

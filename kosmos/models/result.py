@@ -346,10 +346,12 @@ class ResultExport(BaseModel):
             lines.append("| Variable | Mean | Median | Std | Min | Max | N |")
             lines.append("|----------|------|--------|-----|-----|-----|---|")
             for var in self.result.variable_results:
+                def fmt(v):
+                    return f"{v:.2f}" if v is not None else "N/A"
                 lines.append(
                     f"| {var.variable_name} | "
-                    f"{var.mean:.2f} | {var.median:.2f} | {var.std:.2f} | "
-                    f"{var.min:.2f} | {var.max:.2f} | {var.n_samples} |"
+                    f"{fmt(var.mean)} | {fmt(var.median)} | {fmt(var.std)} | "
+                    f"{fmt(var.min)} | {fmt(var.max)} | {var.n_samples or 'N/A'} |"
                 )
             lines.append("")
 
